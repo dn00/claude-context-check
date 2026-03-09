@@ -45,6 +45,16 @@ Fetch https://raw.githubusercontent.com/dn00/claude-context-check/main/skills/co
 
 After installing, restart Claude Code to load the skill.
 
+## Usage
+
+Say "check context" or use the `/context-check` slash command. Claude will report something like:
+
+```
+Context: 91,196/200,000 (45%)
+```
+
+For subagents, include the check instructions in the subagent's prompt since subagents don't load skills automatically.
+
 ## Customization
 
 The skill just teaches Claude *how* to check. To control *when* and *what to do*, tell Claude your preferences — in CLAUDE.md, project memory, or just in conversation. Examples:

@@ -6,9 +6,14 @@ A Claude Code skill that lets Claude check its own context window usage.
 
 Claude Code shows context usage in the UI (`/context`), but Claude itself can't see how much context it's used. It flies blind until auto-compaction kicks in, often mid-task.
 
-## What this does
+## Features
 
-Teaches Claude to read its session JSONL to get precise token counts. The skill is minimal and unopinionated — it just gives Claude the ability to check. What Claude does with that information is up to you (add thresholds to your CLAUDE.md, project memory, etc).
+- **Precise token counts** — reads actual API usage data from session JSONL, not estimates
+- **Multi-instance safe** — uses a conversation-anchored lookup to find the correct session file, even with multiple Claude instances running in the same project
+- **Subagent aware** — works inside subagents, reporting their own context window usage
+- **Unopinionated** — just reports the number; behavior at thresholds is up to you
+- **Minimal footprint** — ~60 lines of JS, ~240 tokens of skill prompt
+- **No dependencies** — runs with Node.js (already required by Claude Code)
 
 ## Install
 
@@ -38,7 +43,7 @@ Or just ask Claude:
 Fetch https://raw.githubusercontent.com/dn00/claude-context-check/main/skills/context-check/SKILL.md and https://raw.githubusercontent.com/dn00/claude-context-check/main/skills/context-check/check.js — save both files to a context-check skill directory. Ask me if I want it installed at the project level or user level.
 ```
 
-After installing, run `/skills` to reload or restart Claude Code.
+After installing, restart Claude Code to load the skill.
 
 ## Customization
 
@@ -50,9 +55,10 @@ The skill just teaches Claude *how* to check. To control *when* and *what to do*
 
 ## How it works
 
-Claude Code writes session data to `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`. Each API response includes token counts in a `usage` field. The skill teaches Claude to find the current session file, trace the current conversation chain via `parentUuid` links (to avoid stale data after `/clear`), and report total input tokens as a percentage of the 200k context window.
+Claude Code writes session data to `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`. Each API response includes token counts in a `usage` field.
+
+When Claude checks context, it picks a unique phrase from its previous response and passes it to `check.js`. The script uses that phrase to identify the correct session file among potentially many (multiple instances, subagent sessions), then reads the last usage entry from that file. Total context is calculated as `input_tokens + cache_creation_input_tokens + cache_read_input_tokens` and reported as a percentage of the 200k window.
 
 ## Limitations
 
-- On the first turn after `/clear`, reports no data (accurate data starts from the second turn)
-- May not work reliably with subagents — they have separate context windows but share the same session JSONL, so usage numbers can get mixed up
+- Reports usage from the *previous* turn (current turn isn't written to JSONL yet), so actual usage is slightly higher than reported

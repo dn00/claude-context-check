@@ -6,16 +6,9 @@ version: 1.0.0
 
 # Context Window Self-Check
 
-Read your session JSONL to get precise token usage.
+## Usage
 
-## How to check
-
-Run `check.js` (located next to this file):
-
-```bash
-node ~/.claude/skills/context-check/check.js
-```
-
-If installed at project level, use `.claude/skills/context-check/check.js` instead.
-
-The script uses the Skill tool invocation entry in the session JSONL to identify the current session and read usage from the same API call. No marker or extra steps needed.
+1. Copy a 4-6 word phrase from your **last response** (must already be in the JSONL — never use text from the current turn)
+2. Run: `node ~/.claude/skills/context-check/check.js "the phrase you copied"`
+   (project-level: `.claude/skills/context-check/check.js`)
+3. Report the result. Value is from the previous turn — actual usage is slightly higher.

@@ -2,39 +2,50 @@ var fs = require("fs");
 var path = require("path");
 var os = require("os");
 
+var anchor = process.argv.slice(2).join(" ");
+if (!anchor) { console.log("Usage: check.js <anchor-phrase>"); process.exit(1); }
+
 var d = path.join(os.homedir(), ".claude/projects", process.cwd().replace(/\//g, "-"));
 
-var files;
+// Collect all JSONL files: top-level sessions + subagent sessions
+var files = [];
 try {
-  files = fs.readdirSync(d)
-    .filter(function(x) { return x.endsWith(".jsonl"); })
-    .map(function(x) { return path.join(d, x); })
-    .sort(function(a, b) { return fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs; });
+  var entries = fs.readdirSync(d, { withFileTypes: true });
+  entries.forEach(function(e) {
+    var full = path.join(d, e.name);
+    if (e.isFile() && e.name.endsWith(".jsonl")) {
+      files.push(full);
+    } else if (e.isDirectory()) {
+      var sub = path.join(full, "subagents");
+      try {
+        fs.readdirSync(sub).forEach(function(s) {
+          if (s.endsWith(".jsonl")) files.push(path.join(sub, s));
+        });
+      } catch(e) {}
+    }
+  });
+  files.sort(function(a, b) { return fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs; });
 } catch(e) {
   console.log("No session dir found");
   process.exit();
 }
 
-// The Skill tool invocation writes {"toolUseResult":{"commandName":"context-check"}}
-// to the JSONL before this script runs. Find that entry and follow sourceToolAssistantUUID
-// to the assistant message which has the current turn's usage data.
-var data = fs.readFileSync(files[0], "utf8");
-var lines = data.split("\n").filter(Boolean).map(JSON.parse);
+// Step 1: Find which file contains the anchor (identifies the correct session)
+// Step 2: Read the last assistant message with usage from that file
+var limit = Math.min(files.length, 10);
+for (var fi = 0; fi < limit; fi++) {
+  var data = fs.readFileSync(files[fi], "utf8");
+  if (data.indexOf(anchor) === -1) continue;
 
-var me = null;
-for (var i = lines.length - 1; i >= 0; i--) {
-  var tr = lines[i].toolUseResult;
-  if (tr && tr.commandName === "context-check") { me = lines[i]; break; }
-}
-if (me === null) { console.log("Skill invocation not found"); process.exit(); }
-
-var tid = me.sourceToolAssistantUUID || me.parentUuid;
-for (var i = lines.length - 1; i >= 0; i--) {
-  if (lines[i].uuid === tid && lines[i].message && lines[i].message.usage) {
-    var u = lines[i].message.usage;
-    var t = (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0);
-    console.log("Context: " + t.toLocaleString() + "/200,000 (" + Math.floor(t * 100 / 200000) + "%)");
-    process.exit();
+  var lines = data.split("\n").filter(Boolean).map(JSON.parse);
+  for (var i = lines.length - 1; i >= 0; i--) {
+    var msg = lines[i].message;
+    if (msg && msg.role === "assistant" && msg.usage) {
+      var u = msg.usage;
+      var t = (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0);
+      console.log("Context: " + t.toLocaleString() + "/200,000 (" + Math.floor(t * 100 / 200000) + "%)");
+      process.exit();
+    }
   }
 }
-console.log("Context: first turn — no usage data yet, check again next turn.");
+console.log("Session not found.");
